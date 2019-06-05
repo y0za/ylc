@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
 
@@ -29,41 +28,20 @@ func main() {
 		googleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
 	}
 
-	config := &oauth2.Config{
-		ClientID:     googleClientID,
-		ClientSecret: googleClientSecret,
-		Endpoint:     google.Endpoint,
-		RedirectURL:  "urn:ietf:wg:oauth:2.0:oob",
-		Scopes: []string{
-			"https://www.googleapis.com/auth/youtube",
-			"https://www.googleapis.com/auth/youtube.readonly",
-			"https://www.googleapis.com/auth/youtube.force-ssl",
-		},
-	}
-
 	ctx := context.Background()
-	token, err := requestOAuthToken(ctx, config)
+
+	config := NewConfig()
+
+	tm := NewOAuthManager(googleClientID, googleClientSecret, config.TokenStore())
+	ts, err := tm.TokenSource(ctx)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
 
-	err = getYoutubeLiveChatMessages(ctx, config.TokenSource(ctx, token))
+	err = getYoutubeLiveChatMessages(ctx, ts)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
-}
-
-func requestOAuthToken(ctx context.Context, config *oauth2.Config) (*oauth2.Token, error) {
-	fmt.Println("Access to this URL and get auth code.")
-	fmt.Println(config.AuthCodeURL(""))
-	fmt.Print("Input auth code: ")
-	var code string
-	_, err := fmt.Scanf("%s\n", &code)
-	if err != nil {
-		return nil, fmt.Errorf("failed to scan auth code: %v", err)
-	}
-
-	return config.Exchange(ctx, code)
 }
 
 func getYoutubeLiveChatMessages(ctx context.Context, tokenSource oauth2.TokenSource) error {
