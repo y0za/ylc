@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -90,13 +91,50 @@ func getYoutubeLiveChatMessages(ctx context.Context, tokenSource oauth2.TokenSou
 	chatID := vResp.Items[0].LiveStreamingDetails.ActiveLiveChatId
 	lcms := youtube.NewLiveChatMessagesService(ys)
 	lcmlc := lcms.List(chatID, "id,snippet,authorDetails")
-	lcmResp, err := lcmlc.Context(ctx).Do()
-	if err != nil {
-		return fmt.Errorf("failed to get chat messages (id = %s): %v", chatID, err)
+
+	cRequest := make(chan RequestMessages)
+	cResult := make(chan ResultMessages)
+	go func() {
+		cRequest <- RequestMessages{}
+	}()
+
+Loop:
+	for {
+		select {
+		case <-ctx.Done():
+			break Loop
+		case req := <-cRequest:
+			go func() {
+				lcmResp, err := lcmlc.Context(ctx).PageToken(req.nextPageToken).Do()
+				cResult <- ResultMessages{lcmResp, err}
+			}()
+		case result := <-cResult:
+			if result.err != nil {
+				return fmt.Errorf("failed to get chat messages (id = %s): %v", chatID, result.err)
+			}
+			for _, mes := range result.lcmResp.Items {
+				fmt.Printf("%s: %s\n", mes.AuthorDetails.DisplayName, mes.Snippet.DisplayMessage)
+			}
+			go func() {
+				var defaultInterval time.Duration = 5 * time.Second
+				interval := time.Duration(result.lcmResp.PollingIntervalMillis) * time.Millisecond
+				if interval < defaultInterval {
+					interval = defaultInterval
+				}
+				time.Sleep(interval)
+				cRequest <- RequestMessages{result.lcmResp.NextPageToken}
+			}()
+		}
 	}
 
-	for _, mes := range lcmResp.Items {
-		fmt.Printf("%s: %s\n", mes.AuthorDetails.DisplayName, mes.Snippet.DisplayMessage)
-	}
 	return nil
+}
+
+type RequestMessages struct {
+	nextPageToken string
+}
+
+type ResultMessages struct {
+	lcmResp *youtube.LiveChatMessageListResponse
+	err     error
 }
