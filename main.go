@@ -23,7 +23,7 @@ func main() {
 		googleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	config := NewConfig()
 
@@ -40,8 +40,25 @@ func main() {
 		log.Fatalf("failed to scan live id: %v", err)
 	}
 
-	err = pollYoutubeLiveChatMessages(ctx, ts, liveID, os.Stdout)
-	if err != nil {
-		log.Fatalf("%v", err)
+	chMsg, chErr, err := pollYoutubeLiveChatMessages(ctx, ts, liveID)
+
+	tui := NewTUI()
+	go tui.ReceiveMessagesLoop(chMsg)
+	go func() {
+		err := tui.Run()
+		cancel()
+		if err != nil {
+			log.Println("%v", err)
+		}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case err = <-chErr:
+			log.Println(err)
+			cancel()
+		}
 	}
 }
