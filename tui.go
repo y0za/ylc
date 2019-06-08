@@ -18,33 +18,38 @@ func NewTUI() *TUI {
 }
 
 // ReceiveMessagesLoop receives new messages and appends them to table.
-// This method should be called as goroutine.
-func (tui *TUI) ReceiveMessagesLoop(chMsg chan *youtube.LiveChatMessageListResponse) {
-	for {
-		data := <-chMsg
-		tui.app.QueueUpdateDraw(func() {
-			for _, mes := range data.Items {
-				row := tui.table.GetRowCount()
-
-				// set message author
-				tui.table.SetCell(
-					row,
-					0, // left column
-					tview.NewTableCell(mes.AuthorDetails.DisplayName).SetMaxWidth(20),
-				)
-
-				// set message text
-				tui.table.SetCell(
-					row,
-					1, // right column
-					tview.NewTableCell(mes.Snippet.DisplayMessage),
-				)
+func (tui *TUI) receiveMessagesLoop(chMsg chan *youtube.LiveChatMessageListResponse) {
+	go func() {
+		for {
+			data, ok := <-chMsg
+			if !ok {
+				break
 			}
-		})
-	}
+			tui.app.QueueUpdateDraw(func() {
+				for _, mes := range data.Items {
+					row := tui.table.GetRowCount()
+
+					// set message author
+					tui.table.SetCell(
+						row,
+						0, // left column
+						tview.NewTableCell(mes.AuthorDetails.DisplayName).SetMaxWidth(20),
+					)
+
+					// set message text
+					tui.table.SetCell(
+						row,
+						1, // right column
+						tview.NewTableCell(mes.Snippet.DisplayMessage),
+					)
+				}
+			})
+		}
+	}()
 }
 
-func (tui *TUI) Run() error {
+func (tui *TUI) Run(chMsg chan *youtube.LiveChatMessageListResponse) error {
+	tui.receiveMessagesLoop(chMsg)
 	tui.app.SetRoot(tui.table, true).SetFocus(tui.table)
 	return tui.app.Run()
 }

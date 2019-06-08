@@ -43,9 +43,8 @@ func main() {
 	chMsg, chErr, err := pollYoutubeLiveChatMessages(ctx, ts, liveID)
 
 	tui := NewTUI()
-	go tui.ReceiveMessagesLoop(chMsg)
 	go func() {
-		err := tui.Run()
+		err := tui.Run(chMsg)
 		cancel()
 		if err != nil {
 			log.Println("%v", err)
