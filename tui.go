@@ -30,7 +30,7 @@ func (tui *TUI) ReceiveMessagesLoop(chMsg chan *youtube.LiveChatMessageListRespo
 				tui.table.SetCell(
 					row,
 					0, // left column
-					tview.NewTableCell(mes.AuthorDetails.DisplayName),
+					tview.NewTableCell(mes.AuthorDetails.DisplayName).SetMaxWidth(20),
 				)
 
 				// set message text
