@@ -10,7 +10,36 @@ import (
 	"google.golang.org/api/youtube/v3"
 )
 
-func pollYoutubeLiveChatMessages(ctx context.Context, tokenSource oauth2.TokenSource, liveID string) (chan *youtube.LiveChatMessageListResponse, chan error, error) {
+type MessageType string
+
+const (
+	ChatEnded   MessageType = "chatEndedEvent"
+	SuperChat   MessageType = "superChatEvent"
+	TextMessage MessageType = "textMessageEvent"
+)
+
+type Author struct {
+	ChannelID       string `json:"channelId"`
+	Name            string `json:"name"`
+	ProfileImageURL string `json:"profileImageUrl"`
+	IsChatModerator bool   `json:"isChatModerator"`
+	IsChatOwner     bool   `json:"isChatOwner"`
+	IsChatSponsor   bool   `json:"isChatSponsor"`
+	IsVerified      bool   `json:"isVerified"`
+}
+
+type Message struct {
+	ID     string      `json:"id"`
+	Author *Author     `json:"author"`
+	Text   string      `json:"text"`
+	Type   MessageType `json:"type"`
+}
+
+type MessageList struct {
+	Items []Message `json:"items"`
+}
+
+func pollYoutubeLiveChatMessages(ctx context.Context, tokenSource oauth2.TokenSource, liveID string) (chan MessageList, chan error, error) {
 	ys, err := youtube.NewService(ctx, option.WithTokenSource(tokenSource))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create youtube service client: %v", err)
@@ -29,13 +58,13 @@ func pollYoutubeLiveChatMessages(ctx context.Context, tokenSource oauth2.TokenSo
 	lcms := youtube.NewLiveChatMessagesService(ys)
 	lcmlc := lcms.List(chatID, "id,snippet,authorDetails")
 
-	chRequest := make(chan RequestMessages)
-	chResult := make(chan ResultMessages)
+	chRequest := make(chan requestMessages)
+	chResult := make(chan resultMessages)
 	go func() {
-		chRequest <- RequestMessages{}
+		chRequest <- requestMessages{}
 	}()
 
-	chMsg := make(chan *youtube.LiveChatMessageListResponse)
+	chMsgList := make(chan MessageList)
 	chErr := make(chan error)
 
 	go func() {
@@ -47,14 +76,15 @@ func pollYoutubeLiveChatMessages(ctx context.Context, tokenSource oauth2.TokenSo
 			case req := <-chRequest:
 				go func() {
 					lcmResp, err := lcmlc.Context(ctx).PageToken(req.nextPageToken).Do()
-					chResult <- ResultMessages{lcmResp, err}
+					chResult <- resultMessages{lcmResp, err}
 				}()
 			case result := <-chResult:
 				if result.err != nil {
 					chErr <- fmt.Errorf("failed to get chat messages (id = %s): %v", chatID, result.err)
 					break Loop
 				}
-				chMsg <- result.lcmResp
+
+				chMsgList <- messageListFromResp(result.lcmResp)
 				go func() {
 					var defaultInterval time.Duration = 5 * time.Second
 					interval := time.Duration(result.lcmResp.PollingIntervalMillis) * time.Millisecond
@@ -62,25 +92,56 @@ func pollYoutubeLiveChatMessages(ctx context.Context, tokenSource oauth2.TokenSo
 						interval = defaultInterval
 					}
 					time.Sleep(interval)
-					chRequest <- RequestMessages{result.lcmResp.NextPageToken}
+					chRequest <- requestMessages{result.lcmResp.NextPageToken}
 				}()
 			}
 		}
 
-		close(chMsg)
+		close(chMsgList)
 		close(chErr)
 		close(chRequest)
 		close(chResult)
 	}()
 
-	return chMsg, chErr, nil
+	return chMsgList, chErr, nil
 }
 
-type RequestMessages struct {
+type requestMessages struct {
 	nextPageToken string
 }
 
-type ResultMessages struct {
+type resultMessages struct {
 	lcmResp *youtube.LiveChatMessageListResponse
 	err     error
+}
+
+func messageListFromResp(resp *youtube.LiveChatMessageListResponse) MessageList {
+	var mList MessageList
+	for _, data := range resp.Items {
+		switch data.Snippet.Type {
+		case string(ChatEnded), string(SuperChat), string(TextMessage): // ok
+		default: // ignore other
+			continue
+		}
+
+		var author *Author
+		if data.AuthorDetails != nil {
+			author = &Author{
+				ChannelID:       data.AuthorDetails.ChannelId,
+				Name:            data.AuthorDetails.DisplayName,
+				ProfileImageURL: data.AuthorDetails.ProfileImageUrl,
+				IsChatModerator: data.AuthorDetails.IsChatModerator,
+				IsChatOwner:     data.AuthorDetails.IsChatOwner,
+				IsChatSponsor:   data.AuthorDetails.IsChatSponsor,
+				IsVerified:      data.AuthorDetails.IsVerified,
+			}
+		}
+		mList.Items = append(mList.Items, Message{
+			ID:     data.Id,
+			Author: author,
+			Text:   data.Snippet.DisplayMessage,
+			Type:   MessageType(data.Snippet.Type),
+		})
+	}
+	return mList
 }
