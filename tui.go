@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
 )
 
@@ -29,11 +30,12 @@ func (tui *TUI) receiveMessagesLoop(chMsgList chan MessageList) {
 					row := tui.table.GetRowCount()
 
 					if mes.Author != nil {
+						ac := authorColor(mes.Author)
 						// set message author
 						tui.table.SetCell(
 							row,
 							0, // left column
-							tview.NewTableCell(mes.Author.Name).SetMaxWidth(20),
+							tview.NewTableCell(mes.Author.Name).SetMaxWidth(20).SetTextColor(ac),
 						)
 					}
 
@@ -53,4 +55,19 @@ func (tui *TUI) Run(chMsgList chan MessageList) error {
 	tui.receiveMessagesLoop(chMsgList)
 	tui.app.SetRoot(tui.table, true).SetFocus(tui.table)
 	return tui.app.Run()
+}
+
+func authorColor(author *Author) tcell.Color {
+	switch {
+	case author.IsChatOwner:
+		return tcell.ColorYellow
+	case author.IsChatModerator:
+		return tcell.ColorSkyblue
+	case author.IsVerified:
+		return tcell.ColorOrange
+	case author.IsChatSponsor:
+		return tcell.ColorLightGreen
+	default:
+		return tcell.ColorWhite
+	}
 }
