@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -30,14 +29,16 @@ func main() {
 	tm := NewOAuthManager(googleClientID, googleClientSecret, config.TokenStore())
 	ts, err := tm.TokenSource(ctx)
 	if err != nil {
-		log.Fatalf("%v", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return
 	}
 
 	fmt.Print("Input live id: ")
 	var liveID string
 	_, err = fmt.Scanf("%s\n", &liveID)
 	if err != nil {
-		log.Fatalf("failed to scan live id: %v", err)
+		fmt.Fprintf(os.Stderr, "failed to scan live id: %v\n", err)
+		return
 	}
 
 	chMsg, chErr, err := pollYoutubeLiveChatMessages(ctx, ts, liveID)
@@ -47,7 +48,7 @@ func main() {
 		err := tui.Run(chMsg)
 		cancel()
 		if err != nil {
-			log.Println("%v", err)
+			fmt.Fprintf(os.Stderr, "%v\n", err)
 		}
 	}()
 
@@ -56,7 +57,7 @@ func main() {
 		case <-ctx.Done():
 			return
 		case err = <-chErr:
-			log.Println(err)
+			fmt.Fprintf(os.Stderr, "%v\n", err)
 			cancel()
 		}
 	}
