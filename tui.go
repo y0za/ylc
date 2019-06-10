@@ -5,6 +5,10 @@ import (
 	"github.com/rivo/tview"
 )
 
+const (
+	maxRowCount = 500
+)
+
 type TUI struct {
 	app   *tview.Application
 	table *tview.Table
@@ -26,6 +30,14 @@ func (tui *TUI) receiveMessagesLoop(chMsgList chan MessageList) {
 				break
 			}
 			tui.app.QueueUpdateDraw(func() {
+				overflowed := (tui.table.GetRowCount() + len(data.Items)) - maxRowCount
+				if overflowed > 0 {
+					// remove overflowed rows
+					for i := 0; i < overflowed; i++ {
+						tui.table.RemoveRow(0)
+					}
+				}
+
 				for _, mes := range data.Items {
 					row := tui.table.GetRowCount()
 
