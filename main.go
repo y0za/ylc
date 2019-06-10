@@ -14,6 +14,7 @@ var (
 	googleClientSecret string
 
 	liveID = flag.String("liveid", "", "specify target YouTube Live id")
+	isJSON = flag.Bool("json", false, "use JSON input output instead of TUI")
 )
 
 func main() {
@@ -49,16 +50,21 @@ func main() {
 		liveID = &lid
 	}
 
-	chMsg, chErr, err := pollYoutubeLiveChatMessages(ctx, ts, *liveID)
+	chMsgList, chErr, err := pollYoutubeLiveChatMessages(ctx, ts, *liveID)
 
-	tui := NewTUI()
-	go func() {
-		err := tui.Run(chMsg)
-		cancel()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-		}
-	}()
+	if *isJSON {
+		jsonIO := NewJSONIO(os.Stdout)
+		jsonIO.Run(chMsgList)
+	} else {
+		tui := NewTUI()
+		go func() {
+			err := tui.Run(chMsgList)
+			cancel()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%v\n", err)
+			}
+		}()
+	}
 
 	for {
 		select {
