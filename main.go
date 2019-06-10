@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 
@@ -11,6 +12,8 @@ import (
 var (
 	googleClientID     string
 	googleClientSecret string
+
+	liveID = flag.String("liveid", "", "specify target YouTube Live id")
 )
 
 func main() {
@@ -21,6 +24,8 @@ func main() {
 	if googleClientSecret == "" {
 		googleClientSecret = os.Getenv("GOOGLE_CLIENT_SECRET")
 	}
+
+	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -33,15 +38,18 @@ func main() {
 		return
 	}
 
-	fmt.Print("Input live id: ")
-	var liveID string
-	_, err = fmt.Scanf("%s\n", &liveID)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to scan live id: %v\n", err)
-		return
+	if *liveID == "" {
+		fmt.Print("Input live id: ")
+		var lid string
+		_, err = fmt.Scanf("%s\n", &lid)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to scan live id: %v\n", err)
+			return
+		}
+		liveID = &lid
 	}
 
-	chMsg, chErr, err := pollYoutubeLiveChatMessages(ctx, ts, liveID)
+	chMsg, chErr, err := pollYoutubeLiveChatMessages(ctx, ts, *liveID)
 
 	tui := NewTUI()
 	go func() {
