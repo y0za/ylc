@@ -84,7 +84,9 @@ func pollYoutubeLiveChatMessages(ctx context.Context, tokenSource oauth2.TokenSo
 					break Loop
 				}
 
-				chMsgList <- messageListFromResp(result.lcmResp)
+				if len(result.lcmResp.Items) > 0 {
+					chMsgList <- messageListFromResp(result.lcmResp)
+				}
 				go func() {
 					var defaultInterval time.Duration = 5 * time.Second
 					interval := time.Duration(result.lcmResp.PollingIntervalMillis) * time.Millisecond
